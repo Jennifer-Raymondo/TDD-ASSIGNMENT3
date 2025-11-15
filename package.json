@@ -1,0 +1,15 @@
+{
+  "name": "tdd2",
+  "version": "1.0.0",
+  "description": "TDD",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "jest": "^30.2.0"
+  }
+}
