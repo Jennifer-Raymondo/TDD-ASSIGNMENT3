@@ -1,67 +1,87 @@
+// PaymentProcessor.js
+const CONVERSION_RATE = 1.2;
+const SUMMER20_RATE = 0.8;
+const WELCOME10_AMOUNT = 10;
+const REFUND_FEE_RATE = 0.05;
+
 class PaymentProcessor {
   constructor(apiClient) {
     this.apiClient = apiClient;
-    this.currencyConversionRate = 1.2; // magic number
+    // keep property name for compatibility with any external code
+    this.currencyConversionRate = CONVERSION_RATE;
   }
 
-  processPayment(
-    amount,
-    currency,
-    userId,
-    paymentMethod,
-    metadata,
-    discountCode,
-    fraudCheckLevel
-  ) {
-    // Long method: does many things
-    // Too many parameters
+  processPayment(amount, currency, userId, paymentMethod, metadata, discountCode, fraudCheckLevel) {
+    this._validatePaymentMethod(paymentMethod, metadata);
 
-    // 1. Validate payment method
-    if (paymentMethod === "credit_card") {
-      if (!metadata.cardNumber || !metadata.expiry) {
+    if (fraudCheckLevel > 0) {
+      this._performFraudCheck(amount, userId);
+    }
+
+    let finalAmount = this._applyDiscount(amount, discountCode);
+
+    if (currency !== "USD") {
+      finalAmount = this._convertCurrency(finalAmount);
+    }
+
+    const transaction = this._buildTransaction({
+      userId,
+      originalAmount: amount,
+      finalAmount,
+      currency,
+      paymentMethod,
+      metadata,
+      discountCode,
+      fraudCheckLevel,
+    });
+
+    this._sendToApi(paymentMethod, transaction);
+    this._sendConfirmationEmail(userId, finalAmount, currency);
+    this._logAnalytics({ userId, amount: finalAmount, currency, method: paymentMethod });
+
+    return transaction;
+  }
+
+  _validatePaymentMethod(method, metadata) {
+    if (method === "credit_card") {
+      if (!metadata || !metadata.cardNumber || !metadata.expiry) {
         throw new Error("Invalid card metadata");
       }
-    } else if (paymentMethod === "paypal") {
-      if (!metadata.paypalAccount) {
+    } else if (method === "paypal") {
+      if (!metadata || !metadata.paypalAccount) {
         throw new Error("Invalid PayPal metadata");
       }
     } else {
       throw new Error("Unsupported payment method");
     }
+  }
 
-    // 2. Check for fraud
-    if (fraudCheckLevel > 0) {
-      // duplicated logic for small or large amount
-      if (amount < 100) {
-        console.log("Performing light fraud check for small payment");
-        this._lightFraudCheck(userId, amount);
-      } else {
-        console.log("Performing heavy fraud check for large payment");
-        this._heavyFraudCheck(userId, amount);
-      }
+  _performFraudCheck(amount, userId) {
+    if (amount < 100) {
+      console.log("Performing light fraud check for small payment");
+      this._lightFraudCheck(userId, amount);
+    } else {
+      console.log("Performing heavy fraud check for large payment");
+      this._heavyFraudCheck(userId, amount);
     }
+  }
 
-    // 3. Apply discount
-    let finalAmount = amount;
-    if (discountCode) {
-      if (discountCode === "SUMMER20") {
-        finalAmount = amount * 0.8; // magic number
-      } else if (discountCode === "WELCOME10") {
-        finalAmount = amount - 10; // magic number
-      } else {
-        console.log("Unknown discount code");
-      }
-    }
+  _applyDiscount(amount, code) {
+    if (!code) return amount;
+    if (code === "SUMMER20") return amount * SUMMER20_RATE;
+    if (code === "WELCOME10") return amount - WELCOME10_AMOUNT;
+    console.log("Unknown discount code");
+    return amount;
+  }
 
-    // 4. Convert currency, if needed
-    if (currency !== "USD") {
-      finalAmount = finalAmount * this.currencyConversionRate; // magic number
-    }
+  _convertCurrency(amount) {
+    return amount * this.currencyConversionRate;
+  }
 
-    // 5. Create transaction object
-    const transaction = {
+  _buildTransaction({ userId, originalAmount, finalAmount, currency, paymentMethod, metadata, discountCode, fraudCheckLevel }) {
+    return {
       userId: userId,
-      originalAmount: amount,
+      originalAmount: originalAmount,
       finalAmount: finalAmount,
       currency: currency,
       paymentMethod: paymentMethod,
@@ -70,39 +90,29 @@ class PaymentProcessor {
       fraudChecked: fraudCheckLevel,
       timestamp: new Date().toISOString(),
     };
+  }
 
-    // 6. Send to API
+  _sendToApi(paymentMethod, transaction) {
+    const endpoint = paymentMethod === "credit_card" ? "/payments/credit" : "/payments/paypal";
     try {
-      // duplicated code: two very similar API calls
-      if (paymentMethod === "credit_card") {
-        this.apiClient.post("/payments/credit", transaction);
-      } else if (paymentMethod === "paypal") {
-        this.apiClient.post("/payments/paypal", transaction);
-      }
+      this.apiClient.post(endpoint, transaction);
       console.log("Payment sent to API:", transaction);
     } catch (err) {
       console.error("Failed to send payment:", err);
       throw err;
     }
+  }
 
-    // 7. Send confirmation email
-    this._sendConfirmationEmail(userId, finalAmount, currency);
+  _sendConfirmationEmail(userId, amount, currency) {
+    console.log(`Sending email to user ${userId}: Your payment of ${amount} ${currency} was successful.`);
+  }
 
-    // 8. Log analytics
-    this._logAnalytics({
-      userId,
-      amount: finalAmount,
-      currency,
-      method: paymentMethod,
-    });
-
-    return transaction;
+  _logAnalytics(data) {
+    console.log("Analytics event:", data);
   }
 
   _lightFraudCheck(userId, amount) {
-    // pretend logic
     console.log(`Light fraud check for user ${userId} on amount ${amount}`);
-    // duplicated code with heavyFraudCheck?
     if (amount < 10) {
       console.log("Very low risk");
     } else {
@@ -112,7 +122,6 @@ class PaymentProcessor {
 
   _heavyFraudCheck(userId, amount) {
     console.log(`Heavy fraud check for user ${userId} on amount ${amount}`);
-    // duplicated logic again
     if (amount < 1000) {
       console.log("Medium risk");
     } else {
@@ -120,20 +129,8 @@ class PaymentProcessor {
     }
   }
 
-  _sendConfirmationEmail(userId, amount, currency) {
-    // In real code, you'd send an email. Here it just prints.
-    console.log(
-      `Sending email to user ${userId}: Your payment of ${amount} ${currency} was successful.`
-    );
-  }
-
-  _logAnalytics(data) {
-    // God service smell: this class is doing analytics too
-    console.log("Analytics event:", data);
-  }
-
   refundPayment(transactionId, userId, reason, amount, currency, metadata) {
-    // Another method with many params (too many parameters)
+    const refundFee = amount * REFUND_FEE_RATE;
     const refund = {
       transactionId,
       userId,
@@ -142,20 +139,13 @@ class PaymentProcessor {
       currency,
       metadata,
       date: new Date(),
+      netAmount: amount - refundFee,
     };
 
-    // Magic number for refund fee percentage
-    const refundFee = amount * 0.05;
-
-    refund.netAmount = amount - refundFee;
-
-    // duplicated code: sending via API again
     this.apiClient.post("/payments/refund", refund);
-
     console.log("Refund processed:", refund);
     return refund;
   }
 }
-
 
 module.exports = PaymentProcessor;
