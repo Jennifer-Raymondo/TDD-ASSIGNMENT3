@@ -7,7 +7,6 @@ const REFUND_FEE_RATE = 0.05;
 class PaymentProcessor {
   constructor(apiClient) {
     this.apiClient = apiClient;
-    // keep property name for compatibility with any external code
     this.currencyConversionRate = CONVERSION_RATE;
   }
 
