@@ -42,6 +42,3 @@ describe("PaymentProcessor simple", () => {
     expect(api.post).toHaveBeenCalledWith("/payments/refund", expect.any(Object));
   });
 });
- hfgfn;matchMedia
- ddeehjkj
-grh
