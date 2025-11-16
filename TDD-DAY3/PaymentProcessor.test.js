@@ -1,5 +1,5 @@
 // PaymentProcessor.test.js
-const PaymentProcessor = require("./PaymentProcessor");
+const PaymentProcessor = require("./PaymentProcessor-refactor");
 
 describe("PaymentProcessor simple", () => {
   let api;
